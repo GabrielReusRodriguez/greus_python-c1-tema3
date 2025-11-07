@@ -3,6 +3,6 @@ Flask
 requests
 pymongo
 flask-sqlalchemy
-jwt
+PyJWT
 pandas
 jsonschema
