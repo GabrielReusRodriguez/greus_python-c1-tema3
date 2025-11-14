@@ -35,7 +35,24 @@ def crear_bd_desde_sql() -> sqlite3.Connection:
     # 4. Ejecuta el script SQL completo
     # 5. Haz commit de los cambios
     # 6. Devuelve la conexión
-    pass
+    #pass
+    # Comprobamos si el fichero db existe, en ese caso, lo borramos.
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+    # Conectamos con la BBDD
+    conexion = sqlite3.connect(DB_PATH)
+    # Leemos el archivo SQL
+    sql_statements = []
+    with open(SQL_FILE_PATH, 'r') as f:
+        sql_script = f.read()
+    # Ejecuto el contenido del fichero sql.
+    cursor = conexion.cursor()
+    cursor.executescript(sql_script)
+    cursor.close()
+    # Hago commit
+    conexion.commit()
+    # retorno la conexion
+    return conexion
 
 def obtener_libros(conexion: sqlite3.Connection) -> List[Tuple]:
     """
@@ -51,7 +68,15 @@ def obtener_libros(conexion: sqlite3.Connection) -> List[Tuple]:
     # 1. Crea un cursor a partir de la conexión
     # 2. Ejecuta una consulta JOIN para obtener los libros con sus autores
     # 3. Retorna los resultados como una lista de tuplas
-    pass
+    #pass
+    # Creo el cusor
+    cursor = conexion.cursor()
+    # Ejecuto el JOIN para obtener los resultados.
+    statement = 'SELECT l.id, l.titulo, l.anio, a.nombre FROM libros AS l INNER JOIN autores AS a ON l.autor_id = a.id'
+    cursor.execute(statement)
+    output = cursor.fetchall()
+    cursor.close()
+    return output
 
 def agregar_libro(conexion: sqlite3.Connection, titulo: str, anio: int, autor_id: int) -> int:
     """
@@ -71,7 +96,15 @@ def agregar_libro(conexion: sqlite3.Connection, titulo: str, anio: int, autor_id
     # 2. Ejecuta una consulta INSERT INTO para añadir el libro
     # 3. Haz commit de los cambios
     # 4. Retorna el ID del nuevo libro (usar cursor.lastrowid)
-    pass
+    #pass
+    cursor = conexion.cursor()
+    statement = f'INSERT INTO libros(titulo, anio, autor_id) VALUES ("{titulo}", {anio}, {autor_id})'
+    cursor.execute(statement)
+    conexion.commit()
+    last_id = cursor.lastrowid
+    cursor.close()
+    return last_id
+
 
 def actualizar_libro(conexion: sqlite3.Connection, libro_id: int, nuevo_titulo: Optional[str] = None,
                     nuevo_anio: Optional[int] = None, nuevo_autor_id: Optional[int] = None) -> bool:
@@ -94,7 +127,40 @@ def actualizar_libro(conexion: sqlite3.Connection, libro_id: int, nuevo_titulo: 
     # 3. Prepara la consulta UPDATE con los campos que no son None
     # 4. Ejecuta la consulta y haz commit de los cambios
     # 5. Retorna True si se modificó alguna fila, False en caso contrario
-    pass
+    #pass
+    changes_before_update = conexion.total_changes
+    cursor = conexion.cursor()
+    statement = f'SELECT * FROM libros WHERE id = {libro_id}'
+    cursor.execute(statement)
+    if cursor.fetchall() is None:
+        return False
+    cursor.close()
+    cursor = conexion.cursor()
+    is_first_set = True
+    statement = f'UPDATE libros SET '
+    if nuevo_titulo is not None:
+        statement = statement + f' titulo = "{nuevo_titulo}"'
+        is_first_set  = False
+    if nuevo_anio is not None:
+        if is_first_set == False:
+            statement = statement + ' , '
+        statement = statement + f' anio = {nuevo_anio}'
+        first_state = False
+    if nuevo_autor_id is not None:
+        if is_first_set == False:
+            statement = statement + ' , '
+        statement = statement + f' autor_id = {nuevo_autor_id}'
+        first_state = False
+
+    statement = statement + f' WHERE id = {libro_id}'
+    cursor.execute(statement)
+    cursor.close()
+    conexion.commit()
+#    print(f'TOTAL UPDATES: {conexion.total_changes} SQL: {statement}')
+    if conexion.total_changes  - changes_before_update > 0:
+        return True
+    else:
+        return False
 
 def obtener_autores(conexion: sqlite3.Connection) -> List[Tuple]:
     """
@@ -110,7 +176,13 @@ def obtener_autores(conexion: sqlite3.Connection) -> List[Tuple]:
     # 1. Crea un cursor a partir de la conexión
     # 2. Ejecuta una consulta SELECT para obtener los autores
     # 3. Retorna los resultados como una lista de tuplas
-    pass
+    #pass
+    cursor = conexion.cursor()
+    statement = f'SELECT * FROM autores'
+    cursor.execute(statement)
+    output = cursor.fetchall()
+    cursor.close()
+    return output
 
 if __name__ == "__main__":
     try:
