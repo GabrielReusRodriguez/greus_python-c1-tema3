@@ -32,7 +32,20 @@ def conectar_bd() -> sqlite3.Connection:
     # 2. Conecta a la base de datos
     # 3. Configura la conexión para que devuelva las filas como diccionarios (opcional)
     # 4. Retorna la conexión
-    pass
+    #pass
+    if os.path.exists(DB_PATH) == False:
+        return None
+    conexion = sqlite3.connect(DB_PATH)
+    """ El test está hecho conforme se devuevlen tuplas, si activo el devovler diccionarios, fallará.
+    def dict_factory(cursor, row):
+        d = {}
+        for idx, col in enumerate(cursor.description):
+            d[col[0]] = row[idx]
+        return d
+    
+    conexion.row_factory = dict_factory
+    """
+    return conexion
 
 def convertir_a_json(conexion: sqlite3.Connection) -> Dict[str, List[Dict[str, Any]]]:
     """
@@ -54,7 +67,31 @@ def convertir_a_json(conexion: sqlite3.Connection) -> Dict[str, List[Dict[str, A
     #    c. Convierte cada fila a un diccionario (clave: nombre columna, valor: valor celda)
     #    d. Añade el diccionario a una lista para esa tabla
     # 4. Retorna el diccionario completo con todas las tablas
-    pass
+    #pass
+    dictionary = {}
+    cursor = conexion.cursor()
+    statement= 'SELECT name FROM sqlite_master  WHERE type = "table"'
+    cursor.execute(statement)
+    tables = cursor.fetchall()
+    for table in tables:
+        cursor_column_names = conexion.cursor()
+        cursor_column_names.execute(f'PRAGMA table_info ("{table[0]}")')
+        columns = cursor_column_names.fetchall()
+        cursor_column_names.close()
+        cursor2 = conexion.cursor()
+        cursor2.execute(f'SELECT* FROM {table[0]}')
+        rows = cursor2.fetchall()
+        cursor2.close()
+        list_table = []
+        #Usamos el campo cid que es numerico para acceder al numero de columna.
+        for row in rows:
+            row_dictionary = {}
+            for column in columns:
+                row_dictionary[column[1]] = row[column[0]]
+            list_table.append(row_dictionary)
+        dictionary[table[0]] = list_table
+    cursor.close()
+    return dictionary
 
 def convertir_a_dataframes(conexion: sqlite3.Connection) -> Dict[str, pd.DataFrame]:
     """
@@ -76,7 +113,42 @@ def convertir_a_dataframes(conexion: sqlite3.Connection) -> Dict[str, pd.DataFra
     #    - Ventas con información de vendedores
     #    - Vendedores con regiones
     # 5. Retorna el diccionario con todos los DataFrames
-    pass
+    #pass
+    dataFrames_dict = {}
+    # obtengo el listado de tablas
+    cursor = conexion.cursor()
+    statement= 'SELECT name FROM sqlite_master  WHERE type = "table"'
+    cursor.execute(statement)
+    tables = cursor.fetchall()
+    cursor.close()
+    # Para cada tabla, creo un dataframe.
+    for table in tables:
+        dataFrame = pd.read_sql_query(f'SELECT * FROM {table[0]}', conexion)
+        dataFrames_dict[table[0]] = dataFrame
+    dataFrame = pd.read_sql_query(f'SELECT t.id, t.nombre, t.apellido, r.nombre, r.pais,  t.fecha_contratacion FROM  vendedores as t INNER JOIN regiones AS r  ON t.region_id = r.id'
+                                        , conexion)
+    dataFrames_dict[f'vendedores_regiones'] = dataFrame
+
+    statement = f"""
+                SELECT 
+                    t.fecha as 'fecha_venta', 
+                    v.nombre as 'nombre_vendedor', 
+                    v.apellido as 'apellido_vendedor', 
+                    v.fecha_contratacion as 'fecha_contratacion',
+                    p.nombre as 'nombre_producto', 
+                    p.categoria as 'categoria', 
+                    p.precio_unitario as 'precio_unitario',  
+                    t.cantidad 
+                FROM ventas as t 
+                INNER JOIN vendedores AS v ON t.vendedor_id = v.id
+                INNER JOIN productos  AS p ON t.producto_id = p.id
+            """
+    dataFrame = pd.read_sql_query(statement, conexion)
+    dataFrames_dict[f'ventas_vendedores_productos'] = dataFrame
+
+    return dataFrames_dict
+
+
 
 if __name__ == "__main__":
     try:
@@ -89,6 +161,7 @@ if __name__ == "__main__":
         cursor = conexion.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tablas = cursor.fetchall()
+        
         print(f"\nTablas en la base de datos: {[t[0] for t in tablas]}")
 
         # Conversión a JSON
