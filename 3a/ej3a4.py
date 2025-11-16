@@ -24,10 +24,10 @@ from bson.objectid import ObjectId
 
 # Configuración de MongoDB (la debes obtener de "docker-compose.yml"):
 DB_NAME = "biblioteca"
-MONGODB_PORT = 0
-MONGODB_HOST = ""
-MONGODB_USERNAME = ""
-MONGODB_PASSWORD = ""
+MONGODB_PORT = 27017
+MONGODB_HOST = 'localhost'
+MONGODB_USERNAME = 'testuser'
+MONGODB_PASSWORD = 'testpass'
 
 def verificar_docker_instalado() -> bool:
     """
@@ -121,7 +121,12 @@ def crear_conexion() -> pymongo.database.Database:
     Crea y devuelve una conexión a la base de datos MongoDB
     """
     # Debes conectarte a la base de datos MongoDB usando PyMongo
-    pass
+    #pass
+    # Conectamos haciendo una instancia de MONGODB
+    mongo_client = pymongo.MongoClient(host = MONGODB_HOST, port = MONGODB_PORT, username = MONGODB_USERNAME, password = MONGODB_PASSWORD)
+    # Elegimos la base de datos como si fuera un diccionario.
+    database = mongo_client[DB_NAME]
+    return database
 
 def crear_colecciones(db: pymongo.database.Database) -> None:
     """
@@ -132,7 +137,12 @@ def crear_colecciones(db: pymongo.database.Database) -> None:
     # Debes crear colecciones para 'autores' y 'libros'
     # 1. Crear colección de autores con índice por nombre
     # 2. Crear colección de libros con índices
-    pass
+    #pass
+    # Especifico check_exists = False para que no pete el test que nos dan.
+    db.create_collection('autores', check_exists= False)
+    db.autores.create_index('nombre')
+    db.create_collection('libros', check_exists= False)
+    db.libros.create_index('nombre')
 
 def insertar_autores(db: pymongo.database.Database, autores: List[Tuple[str]]) -> List[str]:
     """
@@ -142,7 +152,15 @@ def insertar_autores(db: pymongo.database.Database, autores: List[Tuple[str]]) -
     # 1. Convertir las tuplas a documentos
     # 2. Insertar los documentos
     # 3. Devolver los IDs como strings
-    pass
+    # Para crear coleccion usamos el metodo insert_many de la db. y le pasamos el array de diccionarios.
+    list_autores = []
+    for autor in autores:
+        list_autores.append({'nombre' : autor[0]})
+    ids = db.autores.insert_many(list_autores)
+    #for id in ids:
+    #    print (f'id: {id}')
+    #print(f'IDS: {ids.inserted_ids}')
+    return ids.inserted_ids
 
 def insertar_libros(db: pymongo.database.Database, libros: List[Tuple[str, int, str]]) -> List[str]:
     """
@@ -152,7 +170,17 @@ def insertar_libros(db: pymongo.database.Database, libros: List[Tuple[str, int, 
     # 1. Convertir las tuplas a documentos
     # 2. Insertar los documentos
     # 3. Devolver los IDs como strings
-    pass
+    #pass
+    list_libros = []
+    for libro in libros:
+        list_libros.append({'titulo' : libro[0] , 'anio' : libro[1], 'autor_id' : libro[2]})
+
+    ids = db.libros.insert_many(list_libros)
+    #for id in ids:
+    #    print (f'id: {id}')
+    #print(f'IDS: {ids.inserted_ids}')
+    return ids.inserted_ids
+
 
 def consultar_libros(db: pymongo.database.Database) -> None:
     """
@@ -161,7 +189,25 @@ def consultar_libros(db: pymongo.database.Database) -> None:
     # Debes realizar los siguientes pasos:
     # 1. Realizar una agregación para unir libros con autores
     # 2. Mostrar los resultados
-    pass
+    #pass
+    #db.get_collection('libros')
+    # Se hace una agregacion y se le pasa un diccionario con lo que se quiere hacer. 
+    # El foreign key es la columna de libros que queremos vincular
+    # localField es el campo del documento "from"
+
+    res = db.libros.aggregate([
+        {
+            "$lookup" : {
+                "from" : "autores",
+                "foreignField" : "autor_id",
+                "localField" : "nombre",
+                "as" : "autor_id"
+            }
+        }
+
+    ])
+    
+    print(f"{res.to_list()}")
 
 def buscar_libros_por_autor(db: pymongo.database.Database, nombre_autor: str) -> List[Tuple[str, int]]:
     """
@@ -170,7 +216,19 @@ def buscar_libros_por_autor(db: pymongo.database.Database, nombre_autor: str) ->
     # Debes realizar los siguientes pasos:
     # 1. Primero encontrar el autor y buscar todos los libros del autor
     # 2. Convertir a lista de tuplas (titulo, anio)
-    pass
+    #pass
+    # Primero busco el autor.
+    list_libros = []
+    docs_autor = db.autores.find({"nombre" : nombre_autor})
+    for doc_autor in docs_autor:
+        # Primero es la query., el segundo son los  campos que queremos que devuelva
+#        docs_libro = db.libros.find({"autor_id" : doc_autor['nombre']}, { 'titulo' : 1 , 'anio' : 1 , 'autor_id' : 0})
+        #print(f"ASDASDASDAS: {doc_autor}, asdasd : {doc_autor['nombre']}")
+        # En el autor_id se guarda el _id del documento autor.
+        docs_libro = db.libros.find({"autor_id" : doc_autor['_id']})
+        for doc_libro in docs_libro:
+            list_libros.append((doc_libro['titulo'], doc_libro['anio']))
+    return list_libros
 
 def actualizar_libro(
         db: pymongo.database.Database,
@@ -184,7 +242,16 @@ def actualizar_libro(
     # Debes realizar los siguientes pasos:
     # 1. Crear diccionario de actualización
     # 2. Realizar la actualización
-    pass
+    # el diccionario de update ha de tener la clave $set para indicar  los valores que acutalizamos.
+    update_dict = {}
+    if nuevo_titulo is not None:
+        update_dict['titulo'] = nuevo_titulo
+    if nuevo_anio is not None:
+        update_dict['anio'] = nuevo_anio
+    # Nos pasan el object id en string por lo que para hacer la busqueda, hay que hacer un cast a ObjectId
+    res = db.libros.update_many(filter= {'_id' : ObjectId(id_libro)}, update= { '$set' : update_dict})
+    return res.matched_count == res.modified_count
+
 
 def eliminar_libro(
         db: pymongo.database.Database,
@@ -194,7 +261,9 @@ def eliminar_libro(
     Elimina un libro por su ID
     """
     # Debes eliminar el libro con el ID proporcionado
-    pass
+    #pass
+    res = db.libros.delete_many(filter = {'_id' : ObjectId(id_libro)})
+    return res.deleted_count > 0
 
 def ejemplo_transaccion(db: pymongo.database.Database) -> bool:
     """
@@ -204,7 +273,25 @@ def ejemplo_transaccion(db: pymongo.database.Database) -> bool:
     # 1. Insertar un nuevo autor
     # 2. Insertar dos libros del autor
     # Intentar limpiar los datos en caso de error
-    pass
+    #pass
+    # Primero hemos de crear la sesion, podemos hacerlo desde la conexion , la podemos recuperar desde db con client.
+    with db.client.start_session() as session:
+        # creamos la transaccion
+        session.start_transaction()
+        try:
+            res = db.autores.insert_one(document = {'nombre' : 'Pimpollo'})
+            if res == None:
+                raise Exception('Error inserting one document')
+            res = db.libros.insert_many(documents = [{'titulo' : 'C', 'anio' : 1982 , 'autor_id' : 'a'},{'titulo' : 'D', 'anio' : 1922 , 'autor_id' : 'b'}])
+            if res.inserted_ids is None or not res.inserted_ids:
+                raise Exception('Error inserting many documents') 
+            # hacemos commmit.
+            session.commit_transaction()    
+        except Exception as e:
+            # Hubieron problemas, abortamos la transaccion.
+            session.abort_transaction()
+            return False
+        return True
 
 
 if __name__ == "__main__":
@@ -232,12 +319,16 @@ if __name__ == "__main__":
         print("Conexión establecida correctamente.")
 
         # TODO: Implementar el código para probar las funciones
+        crear_colecciones(db)
+        insertar_autores(db, [{'nombre' : 'Gabriel'}, {'nombre' : 'Gregorio'}])
+        insertar_libros(db, [{'name' : 'El quijote' }])
+
 
     except Exception as e:
         print(f"Error: {e}")
     finally:
         # Cerrar la conexión a MongoDB
-        if db:
+        if db is None:
             print("\nConexión a MongoDB cerrada.")
 
         # Detener el proceso de MongoDB si lo iniciamos nosotros
