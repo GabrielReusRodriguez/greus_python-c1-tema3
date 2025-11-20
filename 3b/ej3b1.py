@@ -35,8 +35,16 @@ class Author(Base):
     # - id: clave primaria autoincremental
     # - name: nombre del autor (obligatorio)
     # - Una relación con los libros (books) usando relationship
-    pass
 
+    __tablename__ = 'authors'
+
+    id = Column(Integer, autoincrement= True, primary_key = True)
+    name = Column(String, nullable = False)
+    # usamos mapped con la tabla y el relation
+    book = relationship('Book', uselist = True, back_populates= 'author')
+    
+    def __repr__(self):
+        return f"<author {self.id}  name {self.name}>"
 
 class Book(Base):
     # Define la tabla 'books' con:
@@ -46,15 +54,32 @@ class Book(Base):
     # - year: año de publicación (opcional)
     # - author_id: clave foránea que relaciona con la tabla 'authors'
     # - Una relación con el autor usando relationship
-    pass
+
+    __tablename__ = 'books'
+
+    id = Column(Integer, autoincrement= True, primary_key= True)
+    title = Column(String, nullable= False)
+    year = Column(Integer, nullable= False)
+    author_id = Column(Integer, ForeignKey(Author.id))
+    #author_id : Mapped[int] = mapped_column(ForeignKey('authors.id'))
+    author = relationship('Author', back_populates= 'book')
+    
+    def __repr__(self):
+        return f"<book {self.id}  titled {self.title}  of year {self.year}>"
+
 
 
 # Función para configurar la base de datos
 def setup_database():
     """Configura la base de datos y crea las tablas"""
     # Implementa la creación de tablas en la base de datos usando Base.metadata.create_all()
-    pass
-
+    # pass
+    # Crea  las bbdds.
+    #metadata_obj = Nones
+    #author = Table('authors', metadata_obj, 
+    #    Column('id', Integer, autoincrement= True, primary_key= True)
+    #    )
+    Base.metadata.create_all(engine)
 
 # Función para crear datos de ejemplo
 def create_sample_data(session):
@@ -62,8 +87,22 @@ def create_sample_data(session):
     # Crea al menos dos autores
     # Crea al menos tres libros asociados a los autores
     # Añade todos los objetos a la sesión y haz commit
-    pass
+    autor1 = Author( name = 'Gabriel Reus')
+    autor2 = Author( name = 'Gregorio Reus')
 
+    session.add(autor1)
+    session.add(autor2)
+
+    libro1 = Book(title = 'El Quijote', year = 1982, author = autor1)
+    libro2 = Book(title = 'La celestina', year = 1983, author = autor1)
+    libro3 = Book(title = 'La colmena', year = 1980,  author = autor2)
+
+
+    session.add(libro1)
+    session.add(libro2)
+    session.add(libro3)
+    
+    session.commit()
 
 # Funciones para operaciones CRUD
 def create_book(session, title, author_name, year=None):
@@ -76,21 +115,33 @@ def create_book(session, title, author_name, year=None):
     # Crea un nuevo libro asociado al autor
     # Añade y haz commit a la sesión
     # Retorna el libro creado
-    pass
-
+    #pass
+    author = session.query(Author).filter(Author.name == author_name).first()
+    if author is None:
+        # Creo el autor 
+        author = Author(name = author_name)
+    book = Book( title = title, year = year, author = author)
+    session.add(author)
+    session.add(book)
+    session.commit()
+    return book
+    
 
 def get_all_books(session):
     """Obtiene todos los libros con sus autores"""
     # Consulta todos los libros y carga también los autores (joinedload)
     # Retorna la lista de libros
-    pass
+    #pass
+    results = session.query(Book).options(joinedload(Book.author)).all()
+    return results
 
 
 def get_book_by_id(session, book_id):
     """Obtiene un libro específico por su ID"""
     # Busca un libro por su ID y retórnalo
     # Si no existe, retorna None
-    pass
+    #pass
+    return session.query(Book).options(joinedload(Book.author)).filter(Book.id == book_id).first()
 
 
 def update_book(session, book_id, new_title=None, new_year=None):
@@ -99,14 +150,29 @@ def update_book(session, book_id, new_title=None, new_year=None):
     # Si existe, actualiza los campos que tienen nuevos valores
     # Haz commit a la sesión
     # Retorna el libro actualizado o None si no existe
-    pass
+    #pass
+    """ 
+        Obtenemos el objeto, lo modificamos y hacemos un flush de la sesion para que actualice.
+    """
+    book =  session.query(Book).options(joinedload(Book.author)).filter(Book.id == book_id).first()
+    if book  is not None:
+        if new_title is not None:
+            book.title = new_title
+        if new_year is not None:
+            book.year = new_year
+        session.flush()
+    return book
+    
 
 
 def delete_book(session, book_id):
     """Elimina un libro de la base de datos"""
     # Busca el libro por ID
     # Si existe, elimínalo y haz commit
-    pass
+    # Podemos usar el session.get (clase, id) para obtener la instancia
+    book = session.get(Book, book_id)
+    if book is not None:
+        session.delete(book)
 
 
 def find_books_by_author(session, author_name):
@@ -114,7 +180,12 @@ def find_books_by_author(session, author_name):
     # Consulta los libros uniendo (join) con la tabla de autores
     # Filtra por el nombre del autor
     # Retorna la lista de libros
-    pass
+    #pass
+    #results = session.query(Book).options(joinedload(Book.author)).filter(Book.author.name == author_name)
+    results = session.query(Book).options(joinedload(Book.author)).join(Author, Book.author_id == Author.id).filter(Author.name == author_name).all()
+    #for result in results:
+    #    print(f"GGGGGGGGGGG {result}")
+    return results
 
 
 # Función principal para demostrar el uso de SQLAlchemy
@@ -136,7 +207,7 @@ def main():
         books = get_all_books(session)
         for book in books:
             print(f"Libro: {book.title}, Año: {book.year}, Autor: {book.author.name}")
-        
+
         print("\n--- Crear un nuevo libro ---")
         new_book = create_book(session, "Nuevo libro de ejemplo", "Autor de Prueba", 2025)
         print(f"Libro creado: {new_book.title} por {new_book.author.name}")
@@ -145,7 +216,7 @@ def main():
         book = get_book_by_id(session, 1)
         if book:
             print(f"Libro encontrado: {book.title} por {book.author.name}")
-        
+       
         print("\n--- Actualizar libro ---")
         updated_book = update_book(session, 1, new_title="Título Actualizado", new_year=2026)
         if updated_book:
@@ -155,12 +226,18 @@ def main():
         author_books = find_books_by_author(session, "Autor de Prueba")
         for book in author_books:
             print(f"Libro: {book.title}, Año: {book.year}")
+
+        author_books = find_books_by_author(session, "Gabriel Reus")
+        for book in author_books:
+            print(f"Libro: {book.title}, Año: {book.year}")
+
         
         print("\n--- Eliminar libro ---")
         delete_book(session, 2)
         print("Libro eliminado. Lista actualizada de libros:")
         for book in get_all_books(session):
             print(f"Libro: {book.title}, Autor: {book.author.name}")
+
     finally:
         # Cierra la sesión
         session.close()
