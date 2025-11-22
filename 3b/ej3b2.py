@@ -36,13 +36,27 @@ class Author(db.Model):
     # - id: clave primaria autoincremental
     # - name: nombre del autor (obligatorio)
     # - Una relación con los libros usando db.relationship
-    pass
+    #pass
+    __tablename__ = 'authors'
+
+    id = db.Column(db.Integer, autoincrement = True, primary_key = True)
+    name = db.Column(db.String, nullable = False)
+    book = db.relationship('Book', uselist=True, back_populates='author')
+
 
     def to_dict(self):
         """Convierte el autor a un diccionario para la respuesta JSON"""
         # Implementa este método para devolver id y name
         # No incluyas la lista de libros para evitar recursión infinita
-        pass
+        dictionary = {}
+        dictionary['id'] = self.id
+        dictionary['name'] = self.name
+
+        books = []
+        for _book in self.book:
+            books.append(_book.to_dict())
+        dictionary['books'] = books
+        return dictionary
 
 
 class Book(db.Model):
@@ -56,12 +70,26 @@ class Book(db.Model):
     # - title: título del libro (obligatorio)
     # - year: año de publicación (opcional)
     # - author_id: clave foránea que relaciona con la tabla 'authors'
-    pass
+    #pass
+
+    __tablename__ = 'books'
+
+    id = db.Column(db.Integer, autoincrement = True, primary_key = True)
+    title = db.Column(db.String, nullable = False)
+    year = db.Column(db.Integer, nullable = True)
+    author_id = db.Column(db.Integer, db.ForeignKey(Author.id))
+    author = db.relationship('Author')
 
     def to_dict(self):
         """Convierte el libro a un diccionario para la respuesta JSON"""
         # Implementa este método para devolver id, title, year y author_id
-        pass
+        dictionary = {}
+        dictionary['id'] = self.id
+        dictionary['title'] = self.title
+        if self.year is not None:
+            dictionary['year'] = self.year
+        dictionary['author_id'] = self.author_id
+        return dictionary
 
 
 def create_app():
@@ -91,7 +119,13 @@ def create_app():
         # - Consulta todos los autores
         # - Convierte cada autor a diccionario usando to_dict()
         # - Devuelve la lista en formato JSON
-        pass
+        #pass
+        session = db.session
+        results = session.query(Author).all()
+        authors = []
+        for result in results:
+            authors.append(result.to_dict())
+        return jsonify(authors), 200, {'Content-Type': 'application/json'}
 
     @app.route('/authors', methods=['POST'])
     def add_author():
@@ -104,7 +138,16 @@ def create_app():
         # - Crea un nuevo autor con el nombre proporcionado
         # - Lo guarda en la base de datos
         # - Devuelve el autor creado con código 201
-        pass
+        #pass
+
+        data = request.get_json()
+        if data is None:
+            return jsonify({'message' : 'No data found'}), 400, {'Content-Type' : 'application/json'}
+        author = Author(name = data['name'])
+        session = db.session
+        session.add(author)
+        session.commit()
+        return jsonify(author.to_dict()), 201, {'Content-Type' : 'application/json'}
 
     @app.route('/authors/<int:author_id>', methods=['GET'])
     def get_author(author_id):
@@ -114,7 +157,15 @@ def create_app():
         # Implementa este endpoint:
         # - Busca el autor por ID (usa get_or_404 para gestionar el error 404)
         # - Devuelve los detalles del autor y su lista de libros
-        pass
+        #pass
+        session = db.session
+        author = session.query(Author).get_or_404(author_id)
+        #author = Author.get_or_404(Author, author_id)
+        #author = session.get(Author, author_id)
+        #if author is None:
+        #    return jsonify({'message':'Author not found'}), 404, {'Content-Type' : 'application/json'}
+        #else:
+        return jsonify(author.to_dict()), 200, {'Content-Type' : 'application/json'}
 
     # Endpoints de Libros
     @app.route('/books', methods=['GET'])
@@ -126,7 +177,14 @@ def create_app():
         # - Consulta todos los libros
         # - Convierte cada libro a diccionario
         # - Devuelve la lista en formato JSON
-        pass
+        #pass
+        session = db.session
+        #results = session.query(Book).options(joinedload(Book.author)).all()
+        results = session.query(Book).all()
+        books = []
+        for result in results:
+            books.append(result.to_dict())
+        return jsonify(books), 200, {'Content-Type' : 'application/json'}
 
     @app.route('/books', methods=['POST'])
     def add_book():
@@ -139,7 +197,22 @@ def create_app():
         # - Crea un nuevo libro con título, autor_id y año (opcional)
         # - Lo guarda en la base de datos
         # - Devuelve el libro creado con código 201
-        pass
+        #pass
+        json = request.get_json()
+        session = db.session
+        session.query(Author).get_or_404(json['author_id'])
+        if json is None:
+            return jsonify({'message' : 'json not found'}),400, {'Content-Type' : 'application/json'}
+        book = None
+        if 'year' in json:
+            book = Book(title = json['title'], year = json['year'], author_id = json['author_id'])
+        else:
+            book = Book(title = json['title'], author_id = json['author_id'])
+        
+        session.add(book)
+        session.commit()
+        return jsonify(book.to_dict()), 201, {'Content-Type' : 'application/json'}
+
 
     @app.route('/books/<int:book_id>', methods=['GET'])
     def get_book(book_id):
@@ -149,7 +222,14 @@ def create_app():
         # Implementa este endpoint:
         # - Busca el libro por ID (usa get_or_404 para gestionar el error 404)
         # - Devuelve los detalles del libro
-        pass
+        #pass
+        session = db.session
+        #book = session.query(Book).filter(Book.id == book_id).first()
+        book = session.query(Book).get_or_404(book_id)
+#        if book is None:
+#            return jsonify({'message' : 'book not found'}), 404
+        return jsonify(book.to_dict()), 200, {'Content-Type' : 'application/json'}
+
 
     @app.route('/books/<int:book_id>', methods=['DELETE'])
     def delete_book(book_id):
@@ -160,7 +240,12 @@ def create_app():
         # - Busca el libro por ID (usa get_or_404)
         # - Elimina el libro de la base de datos
         # - Devuelve respuesta vacía con código 204
-        pass
+        #pass
+        session = db.session
+        book = session.query(Book).get_or_404(book_id)
+        session.delete(book)
+        session.commit()
+        return "", 204,{}
 
     @app.route('/books/<int:book_id>', methods=['PUT'])
     def update_book(book_id):
@@ -174,7 +259,15 @@ def create_app():
         # - Actualiza los campos proporcionados (título y/o año)
         # - Guarda los cambios en la base de datos
         # - Devuelve el libro actualizado
-        pass
+        #pass
+        json = request.get_json()
+        session = db.session
+        book = session.query(Book).get_or_404(book_id)
+        book.title = json['title']
+        if 'year' in json:
+            book.year = json['year']
+        session.flush()
+        return jsonify(book.to_dict()), 200, {'Content-Type' : 'application/json'}
 
     return app
 
